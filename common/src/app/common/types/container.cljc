@@ -381,3 +381,37 @@
       (if (ctk/in-component-copy? parent)
         true
         (has-any-copy-parent? objects (:parent-id shape))))))
+
+(defn has-any-main?
+  "Check if the shape has any children or parent that is a main component."
+  [objects shape]
+  (let [inside-component? (get-instance-root objects shape)]
+    (if (or (ctk/main-instance? shape) (ctk/main-instance? inside-component?))
+      true
+      (some true? (map #(has-any-main? objects (get objects %)) (:shapes shape))))))
+
+(defn valid-shape-for-component?
+  "Check if a main component can be generated from this shape in terms of component anidation:
+  - A main can't be the ancestor of another main
+  - A main can't be nested in copies"
+  [objects shape]
+  (and
+    (not (has-any-main? objects shape))
+    (not (has-any-copy-parent? objects shape))))
+
+(defn valid-structure-for-component?
+  "Check if the structure generated nesting children in parent is valid in terms of component anidation"
+  [objects parent children]
+  (let [selected-main-instance? (some true? (map #(ctk/main-instance? %) children))
+        parent-in-component?    (in-any-component? objects parent)
+        comps-nesting-loop?     (not (->> children
+                                          (map #(cfh/components-nesting-loop? objects (:id %) (:id parent)))
+                                          (every? nil?)))]
+    (or
+      ;;We don't want to change the structure of component copies
+      (ctk/in-component-copy? parent)
+      ;; If we are moving something containing a main instance the container can't be part of a component (neither main nor copy)
+      (and selected-main-instance? parent-in-component?)
+      ;; Avoid placing a shape as a direct or indirect child of itself,
+      ;; or inside its main component if it's in a copy.
+      comps-nesting-loop?)))

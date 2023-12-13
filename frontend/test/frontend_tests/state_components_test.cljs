@@ -170,66 +170,113 @@
        (dwl/add-component)
        :the/end))))
 
-(t/deftest test-add-component-from-component
+(t/deftest test-add-component-from-component-instance
   (t/async
     done
     (let [state (-> thp/initial-state
                     (thp/sample-page)
                     (thp/sample-shape :shape1 :rect
-                                      {:name "Rect 1"})
+                      {:name "Rect 1"})
                     (thp/make-component :main1 :component1
-                                        [(thp/id :shape1)]))
+                      [(thp/id :shape1)])
+                    (thp/instantiate-component :instance1 (thp/id :component1)))
 
           store (the/prepare-store state done
-                                   (fn [new-state]
-                                     ;; Expected shape tree:
-                                     ;;
-                                     ;; [Page]
-                                     ;; Root Frame
-                                     ;;   Rect 1
-                                     ;;     Rect 1
-                                     ;;       Rect 1
-                                     ;;
-                                     ;; [Rect 1]
-                                     ;;   page1 / Rect 1
-                                     ;;
-                                     ;; [Rect 1]
-                                     ;;   page1 / Rect 1
-                                     ;;
-                                     (let [[[instance1 shape1]
-                                            [c-instance1 c-shape1]
-                                            component1]
-                                           (thl/resolve-instance-and-main
-                                            new-state
-                                            (thp/id :main1)
-                                            true)
+                  (fn [new-state]
+                    ;; Expected shape tree:
+                    ;;
+                    ;; [Page: Page]
+                    ;;    Root Frame         
+                    ;;      Rect 1          #
+                    ;;        Rect 1         
+                    ;;      Rect 1          #
+                    ;;        Rect 1*         @--> Rect 1
+                    ;;          Rect 1        ---> Rect 1
+                    ;;
+                    (let [[[instance1 shape1]
+                           [c-instance1 c-shape1]
+                           component1]
+                          (thl/resolve-instance-and-main
+                            new-state
+                            (thp/id :instance1)
+                            true)
 
-                                           [[instance2 instance1' shape1']
-                                            [c-instance2 c-instance1' c-shape1']
-                                            component2]
-                                           (thl/resolve-instance-and-main
-                                            new-state
-                                            (:parent-id instance1))]
+                          [[instance2 instance1' shape1']
+                           [c-instance2 c-instance1' c-shape1']
+                           component2]
+                          (thl/resolve-instance-and-main
+                            new-state
+                            (:parent-id instance1))]
 
-                                       (t/is (= (:name shape1) "Rect 1"))
-                                       (t/is (= (:name instance1) "Rect 1"))
-                                       (t/is (= (:name component1) "Rect 1"))
-                                       (t/is (= (:name c-shape1) "Rect 1"))
-                                       (t/is (= (:name c-instance1) "Rect 1"))
+                      (t/is (= (:name shape1) "Rect 1"))
+                      (t/is (= (:name instance1) "Rect 1"))
+                      (t/is (= (:name component1) "Rect 1"))
+                      (t/is (= (:name c-shape1) "Rect 1"))
+                      (t/is (= (:name c-instance1) "Rect 1"))
 
-                                       (t/is (= (:name shape1') "Rect 1"))
-                                       (t/is (= (:name instance1') "Rect 1"))
-                                       (t/is (= (:name instance2) "Rect 1"))
-                                       (t/is (= (:name component2) "Rect 1"))
-                                       (t/is (= (:name c-shape1') "Rect 1"))
-                                       (t/is (= (:name c-instance1') "Rect 1"))
-                                       (t/is (= (:name c-instance2) "Rect 1")))))]
+                      (t/is (= (:name shape1') "Rect 1"))
+                      (t/is (= (:name instance1') "Rect 1"))
+                      (t/is (= (:name instance2) "Rect 1"))
+                      (t/is (= (:name component2) "Rect 1"))
+                      (t/is (= (:name c-shape1') "Rect 1"))
+                      (t/is (= (:name c-instance1') "Rect 1"))
+                      (t/is (= (:name c-instance2) "Rect 1")))))]
 
       (ptk/emit!
-       store
-       (dw/select-shape (thp/id :main1))
-       (dwl/add-component)
-       :the/end))))
+        store
+        (dw/select-shape (thp/id :instance1))
+        (dwl/add-component)
+        :the/end))))
+
+
+(t/deftest test-add-component-from-component-main
+  (t/async
+    done
+    (let [state (-> thp/initial-state
+                    (thp/sample-page)
+                    (thp/sample-shape :shape1 :rect
+                      {:name "Rect 1"})
+                    (thp/make-component :main1 :component1
+                      [(thp/id :shape1)]))
+
+          store (the/prepare-store state done
+                  (fn [new-state]
+                    ;; Expected shape tree:
+                    ;;
+                    ;; [Page]
+                    ;; Root Frame
+                    ;;   Rect 1
+                    ;;     Rect 1
+                    ;;
+                    ;; [Rect 1]
+                    ;;   page1 / Rect 1
+                    ;;
+                    (let [file       (wsh/get-local-file new-state)
+                          components (ctkl/components file)
+                          page    (thp/current-page new-state)
+                          shape1  (thp/get-shape new-state :shape1)
+                          parent1 (ctn/get-shape page (:parent-id shape1))
+                          main1        (thp/get-shape state :main1)
+                          [[instance1 shape1]
+                           [c-instance1 c-shape1]
+                           component1]
+                          (thl/resolve-instance-and-main
+                            new-state
+                            (:id main1))]
+                      ;; Creating a component from a main doesn't generate a new component
+                      (t/is (= (count components) 1))
+
+                      (t/is (= (:name shape1) "Rect 1"))
+                      (t/is (= (:name instance1) "Rect 1"))
+                      (t/is (= (:name component1) "Rect 1"))
+                      (t/is (= (:name c-shape1) "Rect 1"))
+                      (t/is (= (:name c-instance1) "Rect 1")))))]
+
+      (ptk/emit!
+        store
+        (dw/select-shape (thp/id :main1))
+        (dwl/add-component)
+        :the/end))))
 
 (t/deftest test-rename-component
   (t/async
@@ -584,7 +631,62 @@
        (dwl/detach-component (:id instance1))
        :the/end))))
 
-(t/deftest test-add-nested-component
+
+
+(t/deftest test-add-nested-component-instance
+  (t/async
+    done
+    (let [state (-> thp/initial-state
+                    (thp/sample-page)
+                    (thp/sample-shape :shape1 :rect
+                      {:name "Rect 1"})
+                    (thp/make-component :main1 :component1
+                      [(thp/id :shape1)])
+                    (thp/instantiate-component :instance1 (thp/id :component1)))
+
+          store (the/prepare-store state done
+                  (fn [new-state]
+                    ;; Expected shape tree:
+                    ;;
+                    ;; [Page]
+                    ;; Root Frame
+                    ;;   Rect 1
+                    ;;     Rect 1
+                    ;;   Board
+                    ;;     Rect 1
+                    ;;       Rect 1
+                    ;;
+                    ;; [Rect 1]
+                    ;;   page1 / Rect 1
+                    ;;
+                    ;; [Board]
+                    ;;   page1 / Board
+                    ;; 
+                    (let [instance1  (thp/get-shape new-state :instance1)
+
+                          [[group shape1 shape2]
+                           [c-group c-shape1 c-shape2]
+                           component]
+                          (thl/resolve-instance-and-main
+                            new-state
+                            (:parent-id instance1))]
+
+                      (t/is (= (:name group) "Board"))
+                      (t/is (= (:name shape1) "Rect 1"))
+                      (t/is (= (:name shape2) "Rect 1"))
+                      (t/is (= (:name component) "Board"))
+                      (t/is (= (:name c-group) "Board"))
+                      (t/is (= (:name c-shape1) "Rect 1"))
+                      (t/is (= (:name c-shape2) "Rect 1")))))]
+
+      (ptk/emit!
+        store
+        (dw/select-shape (thp/id :instance1))
+        (dwsh/create-artboard-from-selection)
+        (dwl/add-component)
+        :the/end))))
+
+(t/deftest test-add-nested-component-main
   (t/async
     done
     (let [state (-> thp/initial-state
@@ -598,34 +700,36 @@
                                      ;;
                                      ;; [Page]
                                      ;; Root Frame
-                                     ;;   Group
+                                     ;;   Board
                                      ;;     Rect 1
                                      ;;       Rect 1
                                      ;;
                                      ;; [Rect 1]
                                      ;;   page1 / Rect 1
                                      ;;
-                                     ;; [Group]
-                                     ;;   page1 / Group
                                      ;;
-                                     (let [page    (thp/current-page new-state)
+                                     (let [file       (wsh/get-local-file new-state)
+                                           components (ctkl/components file)
+                                           page    (thp/current-page new-state)
+
                                            shape1  (thp/get-shape new-state :shape1)
                                            parent1 (ctn/get-shape page (:parent-id shape1))
 
-                                           [[group shape1 shape2]
-                                            [c-group c-shape1 c-shape2]
+                                           [[group shape1]
+                                            [c-group c-shape1]
                                             component]
                                            (thl/resolve-instance-and-main
-                                            new-state
-                                            (:parent-id parent1))]
+                                             new-state
+                                             (:parent-id shape1))]
 
-                                       (t/is (= (:name group) "Board"))
+                                       ;; Creating a component from something containing a main doesn't generate a new component
+                                       (t/is (= (count components) 1))
+
+                                       (t/is (= (:name group) "Rect 1"))
                                        (t/is (= (:name shape1) "Rect 1"))
-                                       (t/is (= (:name shape2) "Rect 1"))
-                                       (t/is (= (:name component) "Board"))
-                                       (t/is (= (:name c-group) "Board"))
-                                       (t/is (= (:name c-shape1) "Rect 1"))
-                                       (t/is (= (:name c-shape2) "Rect 1")))))]
+                                       (t/is (= (:name component) "Rect 1"))
+                                       (t/is (= (:name c-group) "Rect 1"))
+                                       (t/is (= (:name c-shape1) "Rect 1")))))]
 
       (ptk/emit!
        store

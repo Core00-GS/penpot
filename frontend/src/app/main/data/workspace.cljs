@@ -1845,18 +1845,9 @@
                   tree-root            (get-tree-root-shapes pobjects)
                   only-one-root-shape? (and
                                         (< 1 (count pobjects))
-                                        (= 1 (count tree-root)))
-                  all-objects           (merge page-objects pobjects)
-                  comps-nesting-loop?   (not (->> (keys pobjects)
-                                                  (map #(cfh/components-nesting-loop? all-objects % (:id base)))
-                                                  (every? nil?)))]
+                                        (= 1 (count tree-root)))]
 
               (cond
-                comps-nesting-loop?
-                ;; Avoid placing a shape as a direct or indirect child of itself,
-                ;; or inside its main component if it's in a copy.
-                [uuid/zero uuid/zero (gpt/subtract position orig-pos)]
-
                 (selected-frame? state)
 
                 (if (or (any-same-frame-from-selected? state (keys pobjects))
@@ -1902,7 +1893,7 @@
                                 ;; - Align it to the limits on the x and y axis
                                 ;; - Respect the distance of the object to the right and bottom in the original frame
                                 (gpt/point paste-x paste-y))]
-                    [frame-id frame-id delta (dec (count (:shapes selected-frame-obj )))]))
+                    [frame-id frame-id delta (dec (count (:shapes selected-frame-obj)))]))
 
                 (empty? page-selected)
                 (let [frame-id (ctst/top-nested-frame page-objects position)
@@ -1953,65 +1944,82 @@
     (ptk/reify ::paste-shapes
       ptk/WatchEvent
       (watch [it state _]
-        (let [
-              file-id     (:current-file-id state)
-              page        (wsh/lookup-page state)
+        (let [file-id      (:current-file-id state)
+              page         (wsh/lookup-page state)
 
-              media-idx   (->> (:media pdata)
-                               (d/index-by :prev-id))
+              media-idx    (->> (:media pdata)
+                                (d/index-by :prev-id))
 
-              selected    (:selected pdata)
-              objects     (:objects pdata)
+              selected     (:selected pdata)
+              objects      (:objects pdata)
 
-              position    (deref ms/mouse-position)
+              position     (deref ms/mouse-position)
 
               ;; Calculate position for the pasted elements
               [frame-id
                parent-id
                delta
-               index]     (calculate-paste-position state objects selected position)
+               index]      (calculate-paste-position state objects selected position)
 
-              ;; We don't want to change the structure of component
-              ;; copies If the parent-id or the frame-id are
-              ;; component-copies, we need to get the first not copy
-              ;; parent
-              parent-id   (:id (ctn/get-first-not-copy-parent (:objects page) parent-id))
-              frame-id    (:id (ctn/get-first-not-copy-parent (:objects page) frame-id))
+              page-objects (:objects page)
+              selected-objs        (map (d/getf page-objects) selected)
+              wrapper              (gsh/shapes->rect selected-objs)
+              orig-pos             (gpt/point (:x1 wrapper) (:y1 wrapper))
 
-              objects     (update-vals objects (partial process-shape file-id frame-id parent-id))
-              all-objects (merge (:objects page) objects)
+              invalid-target-parent
+              (ctn/valid-structure-for-component? page-objects (get page-objects parent-id) (vals objects))
+              
+              invalid-target-frame
+              (ctn/valid-structure-for-component? page-objects (get page-objects frame-id) (vals objects))
 
-              libraries   (wsh/get-libraries state)
-              ldata       (wsh/get-file state file-id)
+              ;; We don't want to change the structure of component copies
+              ;; If we are pasting something containing a main instance the container can't be part of a component (neither main nor copy)
+              ;; If the parent-id or the frame-id are component-copies, we need to get the first not copy parent
+              parent-id    (if invalid-target-parent
+                             uuid/zero
+                             (:id (ctn/get-first-not-copy-parent page-objects parent-id)))
+              frame-id     (if invalid-target-frame
+                             uuid/zero
+                             (:id (ctn/get-first-not-copy-parent page-objects frame-id)))
+              delta        (if (or invalid-target-parent invalid-target-frame)
+                             (gpt/subtract position orig-pos)
+                             delta)
 
-              drop-cell   (when (ctl/grid-layout? all-objects parent-id)
-                            (gslg/get-drop-cell frame-id all-objects position))
+              objects      (update-vals objects (partial process-shape file-id frame-id parent-id))
 
-              changes     (-> (dws/prepare-duplicate-changes all-objects page selected delta it libraries ldata file-id)
-                              (pcb/amend-changes (partial process-rchange media-idx))
-                              (pcb/amend-changes (partial change-add-obj-index objects selected index)))
+              all-objects  (merge page-objects objects)
+
+              libraries    (wsh/get-libraries state)
+              ldata        (wsh/get-file state file-id)
+
+              drop-cell    (when (ctl/grid-layout? all-objects parent-id)
+                             (gslg/get-drop-cell frame-id all-objects position))
+
+              changes      (-> (dws/prepare-duplicate-changes all-objects page selected delta it libraries ldata file-id)
+                               (pcb/amend-changes (partial process-rchange media-idx))
+                               (pcb/amend-changes (partial change-add-obj-index objects selected index)))
 
               ;; Adds a resize-parents operation so the groups are
               ;; updated. We add all the new objects
-              changes     (->> (:redo-changes changes)
+              changes      (->> (:redo-changes changes)
+                                (filter add-obj?)
+                                (map :id)
+                                (pcb/resize-parents changes))
+
+              selected     (into (d/ordered-set)
+                             (comp
                                (filter add-obj?)
-                               (map :id)
-                               (pcb/resize-parents changes))
+                               (filter #(contains? selected (:old-id %)))
+                               (map :obj)
+                               (map :id))
+                             (:redo-changes changes))
 
-              selected    (into (d/ordered-set)
-                                (comp
-                                 (filter add-obj?)
-                                 (filter #(contains? selected (:old-id %)))
-                                 (map :obj)
-                                 (map :id))
-                                (:redo-changes changes))
+              changes      (cond-> changes
+                             (some? drop-cell)
+                             (pcb/update-shapes [parent-id]
+                               #(ctl/add-children-to-cell % selected all-objects drop-cell)))
 
-              changes     (cond-> changes
-                            (some? drop-cell)
-                            (pcb/update-shapes [parent-id]
-                                               #(ctl/add-children-to-cell % selected all-objects drop-cell)))
-
-              undo-id     (js/Symbol)]
+              undo-id      (js/Symbol)]
 
           (rx/of (dwu/start-undo-transaction undo-id)
                  (dch/commit-changes changes)

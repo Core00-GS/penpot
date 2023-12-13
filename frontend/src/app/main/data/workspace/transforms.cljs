@@ -24,6 +24,7 @@
    [app.common.types.modifiers :as ctm]
    [app.common.types.shape-tree :as ctst]
    [app.common.types.shape.layout :as ctl]
+   [app.common.uuid :as uuid]
    [app.main.data.workspace.changes :as dch]
    [app.main.data.workspace.collapse :as dwc]
    [app.main.data.workspace.modifiers :as dwm]
@@ -503,6 +504,10 @@
                          (let [position       (gpt/add from-position move-vector)
                                exclude-frames (if mod? exclude-frames exclude-frames-siblings)
                                target-frame   (ctst/top-nested-frame objects position exclude-frames)
+                               invalid-target (ctn/valid-structure-for-component? objects (get objects target-frame) shapes)
+                               target-frame   (if invalid-target
+                                                uuid/zero
+                                                target-frame)
                                flex-layout?   (ctl/flex-layout? objects target-frame)
                                grid-layout?   (ctl/grid-layout? objects target-frame)
                                drop-index     (when flex-layout? (gslf/get-drop-index target-frame objects position))
@@ -527,16 +532,12 @@
                               [(assoc move-vector :x 0) :x]
 
                               :else
-                              [move-vector nil])
+                              [move-vector nil])]
 
-                            nesting-loop? (some #(cfh/components-nesting-loop? objects (:id %) target-frame) shapes)
-                            is-component-copy? (ctk/in-component-copy? (get objects target-frame))]
 
-                        (cond-> (dwm/create-modif-tree ids (ctm/move-modifiers move-vector))
-                          (and (not nesting-loop?) (not is-component-copy?))
-                          (dwm/build-change-frame-modifiers objects selected target-frame drop-index cell-data)
-                          :always
-                          (dwm/set-modifiers false false {:snap-ignore-axis snap-ignore-axis}))))))
+                        (-> (dwm/create-modif-tree ids (ctm/move-modifiers move-vector))
+                            (dwm/build-change-frame-modifiers objects selected target-frame drop-index cell-data)
+                            (dwm/set-modifiers false false {:snap-ignore-axis snap-ignore-axis}))))))
 
               (->> move-stream
                    (rx/with-latest-from ms/mouse-position-alt)
