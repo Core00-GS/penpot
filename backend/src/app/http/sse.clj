@@ -44,6 +44,8 @@
 (defn- encode
   [[name data]]
   (try
+    (prn "SSE" data)
+
     (let [data (with-out-str
                  (println "event:" (d/name name))
                  (println "data:" (t/encode-str data {:type :json-verbose}))

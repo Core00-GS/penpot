@@ -132,36 +132,48 @@
   (letfn [(process-file [{:keys [::db/conn] :as system} {:keys [features] :as file}]
             (binding [pmap/*tracked* (pmap/create-tracked)
                       pmap/*load-fn* (partial feat.fdata/load-pointer system id)
-                      cfeat/*wrap-with-pointer-map-fn*
-                      (if (contains? features "fdata/pointer-map") pmap/wrap identity)
-                      cfeat/*wrap-with-objects-map-fn*
-                      (if (contains? features "fdata/objectd-map") omap/wrap identity)]
+                      *system* system]
+              (let [file (cond-> (update-fn file)
+                           inc-revn?
+                           (update :revn inc))
 
-              (let [file     (cond-> (update-fn file)
-                               inc-revn? (update :revn inc))
-                    features (db/create-array conn "text" (:features file))
-                    data     (blob/encode (:data file))]
+                    file (cond-> file
+                           (and (contains? features "fdata/pointer-map")
+                                (not (contains? (:features file) "fdata/pointer-map")))
+                           (feat.fdata/disable-pointer-map)
+
+                           (and (contains? features "fdata/objects-map")
+                                (not (contains? (:features file) "fdata/objects-map")))
+                           (feat.fdata/disable-objects-map)
+
+                           (and (not (contains? features "fdata/pointer-map"))
+                                (contains? (:features file) "fdata/pointer-map"))
+                           (feat.fdata/enable-pointer-map)
+
+                           (and (not (contains? features "fdata/objects-map"))
+                                (contains? (:features file) "fdata/objects-map"))
+                           (feat.fdata/enable-objects-map))]
 
                 (db/update! conn :file
-                            {:data data
+                            {:data (blob/encode (:data file))
                              :revn (:revn file)
-                             :features features}
-                            {:id id}))
+                             :features (db/create-array conn "text" (:features file))}
+                            {:id id}
+                            {::db/return-keys? false})
 
-              (when (contains? (:features file) "fdata/pointer-map")
-                (feat.fdata/persist-pointers! system id))
+                (when (contains? (:features file) "fdata/pointer-map")
+                  (feat.fdata/persist-pointers! system id))
 
-              (dissoc file :data)))]
+                (dissoc file :data))))]
 
     (db/tx-run! system
                 (fn [system]
-                  (binding [*system* system]
-                    (try
-                      (->> (files/get-file system id :migrate? migrate?)
-                           (process-file system))
-                      (finally
-                        (when rollback?
-                          (db/rollback! system)))))))))
+                  (try
+                    (->> (files/get-file system id :migrate? migrate?)
+                         (process-file system))
+                    (finally
+                      (when rollback?
+                        (db/rollback! system))))))))
 
 (defn analyze-files
   "Apply a function to all files in the database, reading them in

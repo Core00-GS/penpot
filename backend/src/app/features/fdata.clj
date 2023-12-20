@@ -29,6 +29,19 @@
                             (update :components update-vals update-fn))))
         (update :features conj "fdata/objects-map"))))
 
+(defn disable-objects-map
+  [file]
+  (let [update-fn #(d/update-when % :objects (fn [objects]
+                                               (if (omap/objects-map? objects)
+                                                 (into {} objects)
+                                                 objects)))]
+    (-> file
+        (update :data (fn [fdata]
+                        (-> fdata
+                            (update :pages-index update-vals update-fn)
+                            (update :components update-vals update-fn))))
+        (update :features disj "fdata/objects-map"))))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; POINTER-MAP
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -94,3 +107,11 @@
                           (update :components pmap/wrap))))
 
       (update :features conj "fdata/pointer-map")))
+
+(defn disable-pointer-map
+  [file]
+  (-> file
+      (update :data process-pointers deref)
+      (update :features disj "fdata/pointer-map")))
+
+
