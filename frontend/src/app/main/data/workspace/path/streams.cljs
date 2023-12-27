@@ -147,8 +147,8 @@
             position))]
     (->> ms/mouse-position
          (rx/map to-pixel-snap)
-         (rx/with-latest merge (->> ms/mouse-position-shift (rx/map #(hash-map :shift? %))))
-         (rx/with-latest merge (->> ms/mouse-position-alt (rx/map #(hash-map :alt? %))))
+         (rx/with-latest-from merge (->> ms/mouse-position-shift (rx/map #(hash-map :shift? %))))
+         (rx/with-latest-from merge (->> ms/mouse-position-alt (rx/map #(hash-map :alt? %))))
          (rx/with-latest-from (snap-toggled-stream))
          (rx/map check-path-snap))))
 
@@ -169,12 +169,12 @@
 
     (->> ms/mouse-position
          (rx/map to-pixel-snap)
-         (rx/with-latest vector ranges-stream)
+         (rx/with-latest-from vector ranges-stream)
          (rx/with-latest-from (snap-toggled-stream))
          (rx/map (fn [[[position ranges] snap-toggled]]
                    (if snap-toggled
                      (let [snap (snap/get-snap-delta [position] ranges d-pos)]
                        (gpt/add position snap))
                      position)))
-         (rx/with-latest merge (->> ms/mouse-position-shift (rx/map #(hash-map :shift? %))))
-         (rx/with-latest merge (->> ms/mouse-position-alt (rx/map #(hash-map :alt? %)))))))
+         (rx/with-latest-from merge (->> ms/mouse-position-shift (rx/map #(hash-map :shift? %))))
+         (rx/with-latest-from merge (->> ms/mouse-position-alt (rx/map #(hash-map :alt? %)))))))

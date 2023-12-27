@@ -128,8 +128,8 @@
 
                (->> ms/mouse-position
                     (rx/filter #(> (gpt/distance % initial) (/ 2 zoom)))
-                    (rx/with-latest vector ms/mouse-position-shift)
-                    (rx/with-latest conj ms/mouse-position-mod)
+                    (rx/with-latest-from vector ms/mouse-position-shift)
+                    (rx/with-latest-from conj ms/mouse-position-mod)
                     (rx/switch-map
                      (fn [[point :as current]]
                        (->> (snap/closest-snap-point page-id [shape] objects layout zoom focus point)

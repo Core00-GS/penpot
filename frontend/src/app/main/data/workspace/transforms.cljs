@@ -333,8 +333,8 @@
                 angle))]
         (rx/concat
          (->> ms/mouse-position
-              (rx/with-latest vector ms/mouse-position-mod)
-              (rx/with-latest vector ms/mouse-position-shift)
+              (rx/with-latest-from vector ms/mouse-position-mod)
+              (rx/with-latest-from vector ms/mouse-position-shift)
               (rx/map
                (fn [[[pos mod?] shift?]]
                  (let [delta-angle (calculate-angle pos mod? shift?)]
@@ -395,7 +395,7 @@
                 (rx/map #(gpt/length %))
                 (rx/filter #(> % (/ 10 zoom)))
                 (rx/take 1)
-                (rx/with-latest vector ms/mouse-position-alt)
+                (rx/with-latest-from vector ms/mouse-position-alt)
                 (rx/mapcat
                  (fn [[_ alt?]]
                    (rx/concat
@@ -490,12 +490,12 @@
            (let [move-stream
                  (->> position
                       ;; We ask for the snap position but we continue even if the result is not available
-                      (rx/with-latest vector snap-delta)
+                      (rx/with-latest-from vector snap-delta)
 
                       ;; We try to use the previous snap so we don't have to wait for the result of the new
                       (rx/map snap/correct-snap-point)
 
-                      (rx/with-latest vector ms/mouse-position-mod)
+                      (rx/with-latest-from vector ms/mouse-position-mod)
 
                       (rx/map
                        (fn [[move-vector mod?]]

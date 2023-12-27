@@ -234,7 +234,7 @@
             mousedown-events
             (->> mouse-down
                  (rx/take-until end-path-events)
-                 (rx/with-latest merge (streams/position-stream))
+                 (rx/with-latest-from merge (streams/position-stream))
 
                  ;; We change to the stream that emits the first event
                  (rx/switch-map
