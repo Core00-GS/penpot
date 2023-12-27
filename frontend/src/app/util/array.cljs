@@ -6,15 +6,10 @@
 
 (ns app.util.array
   "A collection of helpers for work with javascript arrays."
-  (:refer-clojure :exclude [conj! conj]))
-
-(defn conj
-  "A conj like function for js arrays."
-  [a v]
-  (js* "[...~{}, ~{}]" a v))
+  (:refer-clojure :exclude [conj!]))
 
 (defn conj!
-  "A conj! like function for js arrays."
+  "A conj like function for js arrays."
   [a v]
   (.push ^js a v)
   a)
