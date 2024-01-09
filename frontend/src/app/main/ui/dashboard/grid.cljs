@@ -229,22 +229,27 @@
 
         on-menu-close
         (mf/use-fn
-         #(swap! local assoc :menu-open false))
+         (fn [event]
+           (js/console.log "on-menu-close")
+           (swap! local assoc :menu-open false)))
 
         on-select
-        (fn [event]
-          (when (and (or (not selected?) (> (count selected-files) 1))
-                     (not (:menu-open @local)))
-            (dom/stop-propagation event)
-            (let [shift? (kbd/shift? event)]
-              (when-not shift?
-                (st/emit! (dd/clear-selected-files)))
-              (st/emit! (dd/toggle-file-select file)))))
+        (mf/use-fn
+         (fn [event]
+           (js/console.log "on-select")
+           (when (and (or (not selected?) (> (count selected-files) 1))
+                      (not (:menu-open @local)))
+             (dom/stop-propagation event)
+             (let [shift? (kbd/shift? event)]
+               (when-not shift?
+                 (st/emit! (dd/clear-selected-files)))
+               (st/emit! (dd/toggle-file-select file))))))
 
         on-navigate
         (mf/use-fn
          (mf/deps file)
          (fn [event]
+           (js/console.log "on-navigate")
            (let [menu-icon (mf/ref-val menu-ref)
                  target    (dom/get-target event)]
              (when-not (dom/child? target menu-icon)
@@ -254,6 +259,7 @@
         (mf/use-fn
          (mf/deps selected-files)
          (fn [event]
+           (js/console.log "on-drag-start")
            (let [offset          (dom/get-offset-position (.-nativeEvent event))
 
                  select-current? (not (contains? selected-files (:id file)))
@@ -283,6 +289,7 @@
         (mf/use-fn
          (mf/deps file selected?)
          (fn [event]
+           (js/console.log "on-menu-click")
            (dom/prevent-default event)
            (when-not selected?
              (when-not (kbd/shift? event)
@@ -297,6 +304,7 @@
                                   x              (:left points)]
                               (gpt/point x y))
                             client-position)]
+
              (swap! local assoc
                     :menu-open true
                     :menu-pos position))))
@@ -305,6 +313,7 @@
         (mf/use-fn
          (mf/deps file)
          (fn [name]
+           (js/console.log "edit")
            (let [name (str/trim name)]
              (when (not= name "")
                (st/emit! (dd/rename-file (assoc file :name name)))))
@@ -314,6 +323,7 @@
         (mf/use-fn
          (mf/deps file)
          (fn [event]
+           (js/console.log "on-edit")
            (dom/stop-propagation event)
            (swap! local assoc
                   :edition true
@@ -323,6 +333,7 @@
         (mf/use-callback
          (mf/deps on-navigate on-select)
          (fn [event]
+           (js/console.log "handle-key-down")
            (dom/stop-propagation event)
            (when (kbd/enter? event)
              (on-navigate event))
@@ -333,7 +344,10 @@
 
     (mf/with-effect [selected? local]
       (when (and (not selected?) (:menu-open @local))
-        (swap! local assoc :menu-open false)))
+        (js/console.log "with-effect" (:menu-open @local) selected?)
+        (swap! local assoc :menu-open true)))
+
+    (js/console.log "file-menu" selected?)
 
     [:li
      {:class (stl/css-case :grid-item true :project-th true :library library-view?)}
